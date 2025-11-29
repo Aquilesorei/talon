@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,8 +35,9 @@ enum class TimeRange(val label: String, val days: Int) {
     ALL("All", Int.MAX_VALUE)
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChartsScreen() {
+fun ChartsScreen(onOpenDrawer: () -> Unit) {
     val context = LocalContext.current
     val viewModel: HistoryViewModel = viewModel(factory = HistoryViewModelFactory(context))
     val measurements by viewModel.historyList.collectAsState()
@@ -77,11 +79,17 @@ fun ChartsScreen() {
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
-        Text(
-            text = "Progress Charts",
-            style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onOpenDrawer) {
+                Icon(Icons.Default.Menu, "Menu")
+            }
+            Text(
+                text = "Trends",
+                style = MaterialTheme.typography.headlineMedium
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
         
         // Time Range Selector
         Card(modifier = Modifier.fillMaxWidth()) {

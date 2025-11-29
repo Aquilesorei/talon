@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -22,7 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
-fun HistoryScreen() {
+fun HistoryScreen(onOpenDrawer: () -> Unit) {
     val context = LocalContext.current
     val viewModel: HistoryViewModel = viewModel(factory = HistoryViewModelFactory(context))
 
@@ -93,10 +94,15 @@ fun HistoryScreen() {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "History",
-                    style = MaterialTheme.typography.headlineMedium
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onOpenDrawer) {
+                        Icon(Icons.Default.Menu, "Menu")
+                    }
+                    Text(
+                        text = "History",
+                        style = MaterialTheme.typography.headlineMedium
+                    )
+                }
                 IconButton(onClick = { showFilters = !showFilters }) {
                     Icon(Icons.Default.FilterList, "Filters")
                 }

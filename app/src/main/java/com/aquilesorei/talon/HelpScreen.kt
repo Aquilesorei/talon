@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -19,7 +20,7 @@ data class FAQItem(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HelpScreen() {
+fun HelpScreen(onOpenDrawer: () -> Unit) {
     val faqs = listOf(
         FAQItem(
             "How do I connect my smart scale?",
@@ -72,11 +73,16 @@ fun HelpScreen() {
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
-        Text(
-            text = "Help & FAQ",
-            style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onOpenDrawer) {
+                Icon(Icons.Default.Menu, "Menu")
+            }
+            Text(
+                text = "Help & FAQ",
+                style = MaterialTheme.typography.headlineMedium
+            )
+        }
+        Spacer(modifier = Modifier.height(16.dp))
         
         // Quick Tips Card
         Card(

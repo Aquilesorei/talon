@@ -6,6 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBox
@@ -21,12 +22,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
+import androidx.compose.ui.unit.dp
 import com.aquilesorei.talon.ui.theme.TalonTheme
 
 class MainActivity : ComponentActivity() {
@@ -51,55 +54,82 @@ class MainActivity : ComponentActivity() {
 }
 
 @PreviewScreenSizes
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TalonApp() {
-    // État pour gérer l'onglet sélectionné
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.HOME) }
 
-    NavigationSuiteScaffold(
-        navigationSuiteItems = {
-            AppDestinations.entries.forEach {
-                item(
-                    icon = {
-                        Icon(
-                            it.icon,
-                            contentDescription = it.label
-                        )
-                    },
-                    label = { Text(it.label) },
-                    selected = it == currentDestination,
-                    onClick = { currentDestination = it }
+    // Split destinations
+    val bottomDestinations = listOf(
+        AppDestinations.HOME,
+        AppDestinations.GOALS,
+        AppDestinations.CHARTS,
+        AppDestinations.HISTORY
+    )
+    
+    val drawerDestinations = listOf(
+        AppDestinations.PROFILE,
+        AppDestinations.SETTINGS,
+        AppDestinations.HELP
+    )
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "Talon",
+                    modifier = Modifier.padding(16.dp),
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.primary
                 )
+                HorizontalDivider()
+                Spacer(Modifier.height(12.dp))
+                
+                drawerDestinations.forEach { item ->
+                    NavigationDrawerItem(
+                        icon = { Icon(item.icon, contentDescription = null) },
+                        label = { Text(item.label) },
+                        selected = currentDestination == item,
+                        onClick = {
+                            currentDestination = item
+                            scope.launch { drawerState.close() }
+                        },
+                        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                    )
+                }
             }
         }
     ) {
-        Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-            // C'est ici que la navigation opère
-            Box(modifier = Modifier.padding(innerPadding)) {
-                when (currentDestination) {
-                    AppDestinations.HOME -> {
-                        // Affiche ton écran de scanner Bluetooth
-                        HomeScreen()
+        NavigationSuiteScaffold(
+            navigationSuiteItems = {
+                bottomDestinations.forEach { item ->
+                    item(
+                        icon = { Icon(item.icon, contentDescription = item.label) },
+                        label = { Text(item.label) },
+                        selected = currentDestination == item,
+                        onClick = { currentDestination = item }
+                    )
+                }
+            }
+        ) {
+            Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                Box(modifier = Modifier.padding(innerPadding)) {
+                    val openDrawer: () -> Unit = { 
+                        scope.launch { drawerState.open() } 
                     }
-                    AppDestinations.GOALS -> {
-                        GoalsScreen()
-                    }
-                    AppDestinations.CHARTS -> {
-                        ChartsScreen()
-                    }
-                    AppDestinations.HISTORY -> {
-                        // Placeholder pour l'instant
-                        HistoryScreen()
-                    }
-                    AppDestinations.PROFILE -> {
-                        // Placeholder pour l'instant
-                       ProfileScreen()
-                    }
-                    AppDestinations.SETTINGS -> {
-                        SettingsScreen()
-                    }
-                    AppDestinations.HELP -> {
-                        HelpScreen()
+                    
+                    when (currentDestination) {
+                        AppDestinations.HOME -> HomeScreen(onOpenDrawer = openDrawer)
+                        AppDestinations.GOALS -> GoalsScreen(onOpenDrawer = openDrawer)
+                        AppDestinations.CHARTS -> ChartsScreen(onOpenDrawer = openDrawer)
+                        AppDestinations.HISTORY -> HistoryScreen(onOpenDrawer = openDrawer)
+                        AppDestinations.PROFILE -> ProfileScreen(onOpenDrawer = openDrawer)
+                        AppDestinations.SETTINGS -> SettingsScreen(onOpenDrawer = openDrawer)
+                        AppDestinations.HELP -> HelpScreen(onOpenDrawer = openDrawer)
                     }
                 }
             }

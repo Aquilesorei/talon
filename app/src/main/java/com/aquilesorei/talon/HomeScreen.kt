@@ -34,7 +34,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 
 @Composable
-fun HomeScreen() {
+fun HomeScreen(onOpenDrawer: () -> Unit) {
     val context = LocalContext.current
 
     // Initialisation du ViewModel
@@ -127,13 +127,24 @@ fun HomeScreen() {
     }
 
     // --- ÉCRAN PRINCIPAL ---
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Spacer(modifier = Modifier.weight(0.5f))
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Menu Button
+        IconButton(
+            onClick = onOpenDrawer,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(16.dp)
+        ) {
+            Icon(Icons.Default.Menu, contentDescription = "Menu")
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(modifier = Modifier.weight(0.5f))
 
         // --- SECTION POIDS ---
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -261,6 +272,7 @@ fun HomeScreen() {
         }
 
         Spacer(modifier = Modifier.height(32.dp))
+    }
     }
 }
 
