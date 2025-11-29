@@ -31,6 +31,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.dp
 import com.aquilesorei.talon.ui.theme.TalonTheme
+import com.aquilesorei.talon.ui.screens.home.HomeScreen
+import com.aquilesorei.talon.ui.screens.charts.ChartsScreen
+import com.aquilesorei.talon.ui.screens.goals.GoalsScreen
+import com.aquilesorei.talon.ui.screens.history.HistoryScreen
+import com.aquilesorei.talon.ui.screens.profile.ProfileScreen
+import com.aquilesorei.talon.ui.screens.settings.SettingsScreen
+import com.aquilesorei.talon.ui.screens.help.HelpScreen
+import com.aquilesorei.talon.ui.screens.onboarding.OnboardingScreen
+import com.aquilesorei.talon.data.local.database.TalonDatabase
+import com.aquilesorei.talon.data.local.entities.UserPreferences
+import com.aquilesorei.talon.data.repository.UserPreferencesRepository
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

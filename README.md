@@ -53,6 +53,27 @@ Track more than just weight. Talon captures and analyzes:
 - **Background Tasks**: WorkManager
 - **Navigation**: Compose Navigation Suite
 
+## 📂 Project Structure
+
+The project follows a **layered architecture** based on Android best practices, separating concerns into UI, Data, and Domain layers:
+
+```
+com.aquilesorei.talon
+├── ui/              # Presentation Layer
+│   ├── screens/     # Composable screens (Home, History, etc.)
+│   ├── components/  # Reusable UI components
+│   └── theme/       # Theme definitions
+├── domain/          # Domain Layer
+│   ├── models/      # Business objects (Measurement, UserProfile)
+│   └── usecases/    # Business logic
+├── data/            # Data Layer
+│   ├── local/       # Local storage (Room DB, DAOs, Entities)
+│   └── repository/  # Single source of truth for data
+├── viewmodels/      # State holders
+├── workers/         # Background tasks (WorkManager)
+└── utils/           # Utility classes
+```
+
 ## 🚀 Getting Started
 
 ### Prerequisites
