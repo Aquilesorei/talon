@@ -2,11 +2,11 @@
 
 ## ✨ Features
 
-* **🧬 Scientifically Calibrated:** Body Fat algorithm derived from **59,430 clinical profiles** (CDC NHANES dataset).
-* **📐 DEXA-Grade Accuracy:** Our formula correlates raw Bio-electrical Impedance (BIA) with medical Dual-Energy X-ray Absorptiometry (DEXA) scans, replacing generic commercial approximations.
-* **⚡ Direct BLE Connection:** Reverse-engineered support for "OKOK" protocol scales (and compatible generic chipsets).
-* **🚫 Ad-Free & Account-Free:** No cloud servers, no sign-ups, no ads. Your biometric data stays on your device.
-* **🔗 Google Fit Integration:** Seamless sync using the modern Android Health Connect API.
+- **🧬 Scientifically Calibrated:** Body Fat algorithm derived from **59,430 clinical profiles** (CDC NHANES dataset).
+- **📐 DEXA-Grade Accuracy:** Our formula correlates raw Bio-electrical Impedance (BIA) with medical Dual-Energy X-ray Absorptiometry (DEXA) scans, replacing generic commercial approximations.
+- **⚡ Direct BLE Connection:** Reverse-engineered support for "OKOK" protocol scales (and compatible generic chipsets).
+- **🚫 Ad-Free & Account-Free:** No cloud servers, no sign-ups, no ads. Your biometric data stays on your device.
+- **🔗 Google Fit Integration:** Seamless sync using the modern Android Health Connect API.
 
 ### 📊 Comprehensive Metrics
 
@@ -27,8 +27,8 @@ Most generic smart scales use obscure, proprietary formulas to estimate Body Fat
 
 We trained a Linear Regression Machine Learning model on the **NHANES 1999-2004** dataset (National Health and Nutrition Examination Survey) provided by the US CDC. This specific period is considered the "Golden Age" of body composition data, as it contains both:
 
-1.  **Input:** Raw BIA Resistance (Ohms) - *what your scale measures.*
-2.  **Ground Truth:** Whole-body DEXA Scans - *the medical gold standard for body fat.*
+1.  **Input:** Raw BIA Resistance (Ohms) - _what your scale measures._
+2.  **Ground Truth:** Whole-body DEXA Scans - _the medical gold standard for body fat._
 
 **The Result:** A custom formula optimized on **59,430 real human profiles** to translate your scale's electrical resistance into meaningful health metrics with minimized error.
 
@@ -59,11 +59,21 @@ We trained a Linear Regression Machine Learning model on the **NHANES 1999-2004*
 - **Reminders**: Schedule daily weigh-in notifications
 - **Onboarding**: Guided setup for new users
 
+## 📸 Screenshots
+
+|                         Measure Tab                         |                         Scanning UI                         |
+| :---------------------------------------------------------: | :---------------------------------------------------------: |
+|    <img src="screenshots/measure_tab.png" width="300" />    |    <img src="screenshots/scanning_ui.png" width="300" />    |
+|                       **Empty State**                       |                       **Navigation**                        |
+| <img src="screenshots/measure_tap_empty.png" width="300" /> | <img src="screenshots/navigation_drawer.png" width="300" /> |
+|                        **Settings**                         |                          **Help**                           |
+|     <img src="screenshots/settings.png" width="300" />      |       <img src="screenshots/help.png" width="300" />        |
+
 ## 🛠️ Tech Stack
 
-* **Android:** Kotlin, Jetpack Compose (Material 3), MVVM, Room Database.
-* **Bluetooth:** Android BLE Scanner & GATT.
-* **Data Science:** Python (pandas, scikit-learn) for algorithm calibration
+- **Android:** Kotlin, Jetpack Compose (Material 3), MVVM, Room Database.
+- **Bluetooth:** Android BLE Scanner & GATT.
+- **Data Science:** Python (pandas, scikit-learn) for algorithm calibration
 
 <!-- end list -->
 
