@@ -49,9 +49,28 @@ fun HomeScreen(onOpenDrawer: () -> Unit) {
     )
 
     val state by viewModel.uiState.collectAsState()
+    val preferences by viewModel.preferences.collectAsState(initial = com.aquilesorei.talon.data.local.entities.UserPreferences())
 
     // État pour la boîte de dialogue "GPS requis"
     var showLocationDialog by remember { mutableStateOf(false) }
+
+    // --- AUTO-CONNECT LOGIC ---
+    LaunchedEffect(preferences.savedScaleAddress, preferences.autoScanEnabled) {
+        val savedAddress = preferences.savedScaleAddress
+        if (savedAddress != null && preferences.autoScanEnabled && !state.isScanning && state.targetAddress == null) {
+            // Check if we have permissions and enabled services before trying to auto-connect
+            val hasPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) == android.content.pm.PackageManager.PERMISSION_GRANTED &&
+                androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            } else {
+                androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            }
+
+            if (hasPermissions && viewModel.isBluetoothEnabled() && viewModel.isLocationEnabled()) {
+                viewModel.autoConnectToSavedDevice(savedAddress)
+            }
+        }
+    }
 
     // --- 1. Launcher: Activer Bluetooth ---
     val enableBluetoothLauncher = rememberLauncherForActivityResult(
@@ -61,7 +80,13 @@ fun HomeScreen(onOpenDrawer: () -> Unit) {
             if (!viewModel.isLocationEnabled()) {
                 showLocationDialog = true
             } else {
-                viewModel.startDiscovery()
+                // If we have a saved device and auto-scan is enabled, try to connect to it first
+                val savedAddress = preferences.savedScaleAddress
+                if (savedAddress != null && preferences.autoScanEnabled) {
+                     viewModel.autoConnectToSavedDevice(savedAddress)
+                } else {
+                     viewModel.startDiscovery()
+                }
             }
         }
     }
@@ -91,7 +116,13 @@ fun HomeScreen(onOpenDrawer: () -> Unit) {
             } else if (!viewModel.isLocationEnabled()) {
                 showLocationDialog = true
             } else {
-                viewModel.startDiscovery()
+                // If we have a saved device and auto-scan is enabled, try to connect to it first
+                val savedAddress = preferences.savedScaleAddress
+                if (savedAddress != null && preferences.autoScanEnabled) {
+                     viewModel.autoConnectToSavedDevice(savedAddress)
+                } else {
+                     viewModel.startDiscovery()
+                }
             }
         }
     }

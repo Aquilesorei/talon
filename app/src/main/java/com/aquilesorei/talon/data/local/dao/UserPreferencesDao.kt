@@ -28,4 +28,13 @@ interface UserPreferencesDao {
     
     @Query("UPDATE user_preferences SET hasCompletedOnboarding = :completed WHERE id = 1")
     suspend fun updateOnboardingStatus(completed: Boolean)
+    
+    @Query("UPDATE user_preferences SET savedScaleAddress = :address, savedScaleName = :name WHERE id = 1")
+    suspend fun saveScaleDevice(address: String, name: String)
+    
+    @Query("UPDATE user_preferences SET savedScaleAddress = NULL, savedScaleName = NULL WHERE id = 1")
+    suspend fun clearScaleDevice()
+
+    @Query("UPDATE user_preferences SET autoScanEnabled = :enabled WHERE id = 1")
+    suspend fun updateAutoScanEnabled(enabled: Boolean)
 }

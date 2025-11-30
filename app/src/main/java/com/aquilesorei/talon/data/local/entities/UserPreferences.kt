@@ -25,5 +25,9 @@ data class UserPreferences(
     val notificationsEnabled: Boolean = true,
     val achievementNotifications: Boolean = true,
     val goalProgressNotifications: Boolean = true,
-    val hasCompletedOnboarding: Boolean = false
+    val hasCompletedOnboarding: Boolean = false,
+    val savedScaleAddress: String? = null, // Bluetooth MAC address
+    val savedScaleName: String? = null, // Device name for display
+    val autoScanEnabled: Boolean = true // Default to true
 )
+

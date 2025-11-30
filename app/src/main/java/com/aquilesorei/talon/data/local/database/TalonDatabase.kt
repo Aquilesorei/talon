@@ -18,7 +18,7 @@ import com.aquilesorei.talon.domain.models.UserProfile
 
 @Database(
     entities = [Measurement::class, UserProfile::class, Goal::class, UserPreferences::class],
-    version = 3,
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -95,6 +95,22 @@ abstract class TalonDatabase : RoomDatabase() {
             }
         }
 
+        // Migration from version 3 to 4: Add saved scale device fields
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE user_preferences ADD COLUMN savedScaleAddress TEXT")
+                db.execSQL("ALTER TABLE user_preferences ADD COLUMN savedScaleName TEXT")
+            }
+        }
+
+        // Migration from version 4 to 5: Add autoScanEnabled field
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE user_preferences ADD COLUMN autoScanEnabled INTEGER NOT NULL DEFAULT 1")
+            }
+        }
+
+
         fun getDatabase(context: Context): TalonDatabase {
             // Pattern Singleton pour n'avoir qu'une seule instance de la BDD ouverte
             return INSTANCE ?: synchronized(this) {
@@ -103,7 +119,18 @@ abstract class TalonDatabase : RoomDatabase() {
                     TalonDatabase::class.java,
                     "talon_database"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addCallback(object : RoomDatabase.Callback() {
+                        override fun onCreate(db: SupportSQLiteDatabase) {
+                            super.onCreate(db)
+                            // Ensure default preferences exist on fresh install
+                            db.execSQL("""
+                                INSERT OR IGNORE INTO user_preferences VALUES (
+                                    1, 'SYSTEM', 0, '09:00', 'DAILY', 1, 1, 1, 0, NULL, NULL, 1
+                                )
+                            """.trimIndent())
+                        }
+                    })
                     .build()
                 INSTANCE = instance
                 instance

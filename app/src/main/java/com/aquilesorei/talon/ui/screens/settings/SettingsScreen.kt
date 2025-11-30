@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.*
+import androidx.compose.material3.Divider
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -120,6 +121,76 @@ fun SettingsScreen(onOpenDrawer: () -> Unit) {
         }
         
         Spacer(modifier = Modifier.height(16.dp))
+
+        // Device Settings Section
+        if (preferences.savedScaleAddress != null) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Connected Device", style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = preferences.savedScaleName ?: "Unknown Device",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                            )
+                            Text(
+                                text = preferences.savedScaleAddress ?: "",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        
+                        OutlinedButton(
+                            onClick = {
+                                scope.launch {
+                                    preferencesRepo.forgetScaleDevice()
+                                }
+                            },
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Text("Forget")
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Divider()
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Auto-scan", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                "Automatically connect when app opens",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = preferences.autoScanEnabled,
+                            onCheckedChange = {
+                                scope.launch {
+                                    preferencesRepo.updateAutoScanEnabled(it)
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
         
         // Data Management Section
         Card(modifier = Modifier.fillMaxWidth()) {

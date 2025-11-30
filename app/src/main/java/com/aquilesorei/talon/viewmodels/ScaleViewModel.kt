@@ -20,28 +20,29 @@ import kotlinx.coroutines.launch
 import com.aquilesorei.talon.data.local.database.TalonDatabase
 import com.aquilesorei.talon.data.repository.UserProfileRepository
 import com.aquilesorei.talon.data.repository.MeasurementRepository
+import com.aquilesorei.talon.data.repository.UserPreferencesRepository
 import com.aquilesorei.talon.domain.models.BodyMetricsCalculator
 
-// Modèle pour la liste de découverte
 data class BluetoothDeviceUi(
     val name: String,
     val address: String,
     val rssi: Int
 )
 
-// État de l'interface (UI State)
-data class ScaleUiState(
-    // Données brutes
-    val weight: Float = 0f,
-    val impedance: Float = 0f,
-    val rawData: String = "",
+data class MeasurementPacket(
+    val weight: Float,
+    val impedance: Float,
+    val rawBytes: ByteArray,
+    val timestamp: Long = System.currentTimeMillis()
+)
 
-    // Données calculées (Body Metrics)
+data class ScaleUiState(
+    val weight: Float = 0f,
+    val impedance: Float = 0f, // 0 = Inconnu/Instable (affichera "--")
+    val rawData: String = "",
     val bodyFat: Float = 0f,
     val water: Float = 0f,
     val muscle: Float = 0f,
-
-    // États de l'application
     val isScanning: Boolean = false,
     val isDeviceListOpen: Boolean = false,
     val scannedDevices: List<BluetoothDeviceUi> = emptyList(),
@@ -51,40 +52,49 @@ data class ScaleUiState(
 
 class ScaleViewModel(private val context: Context) : ViewModel() {
 
-    // --- Services Système ---
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     private val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
     private val scanner = bluetoothManager.adapter.bluetoothLeScanner
 
-    // --- Repositories (Données) ---
     private val database = TalonDatabase.getDatabase(context)
     private val userRepository = UserProfileRepository(database.userProfileDao())
     private val measurementRepository = MeasurementRepository(context)
+    private val preferencesRepository = UserPreferencesRepository(database.userPreferencesDao(), context)
 
-    // --- État & Timer ---
     private val _uiState = MutableStateFlow(ScaleUiState())
     val uiState = _uiState.asStateFlow()
+    
+    // Expose preferences for auto-connect
+    val preferences = preferencesRepository.preferences
 
     private var scanTimeoutJob: Job? = null
     private val SCAN_DURATION_SECONDS = 60
 
-    // Variable pour éviter d'enregistrer plusieurs fois la même pesée en une fraction de seconde
+    // --- LE VERROU (C'est ça qui manquait !) ---
+    private var isCalculationDone = false
     private var lastSavedTimestamp: Long = 0
 
-    // --- CALLBACK BLUETOOTH (Le cœur de l'écoute) ---
+    // --- PACKET COLLECTION ---
+    private val collectedPackets = mutableListOf<MeasurementPacket>()
+    private var packetDebounceJob: Job? = null
+    private val PACKET_TIMEOUT_MS = 2000L // 2 seconds without packets = sender stopped
+
+
     private val scanCallback = object : ScanCallback() {
         @SuppressLint("MissingPermission")
         override fun onScanResult(callbackType: Int, result: ScanResult?) {
+            // 🔒 SÉCURITÉ : Si c'est fini, on ferme la porte !
+            if (isCalculationDone) return
+
             result?.device?.let { device ->
                 val deviceName = device.name ?: "Unknown Device"
                 val deviceAddress = device.address
                 val rssi = result.rssi
 
-                // 1. Mode DÉCOUVERTE : On remplit la liste pour la boîte de dialogue
+                // 1. Mode Liste
                 if (_uiState.value.isDeviceListOpen) {
                     val newDevice = BluetoothDeviceUi(deviceName, deviceAddress, rssi)
                     _uiState.update { currentState ->
-                        // On évite les doublons visuels dans la liste
                         if (currentState.scannedDevices.none { it.address == deviceAddress }) {
                             currentState.copy(scannedDevices = currentState.scannedDevices + newDevice)
                         } else {
@@ -93,28 +103,39 @@ class ScaleViewModel(private val context: Context) : ViewModel() {
                     }
                 }
 
-                // 2. Mode MESURE : On cible la balance sélectionnée
+                // 2. Mode Mesure
                 if (_uiState.value.targetAddress == deviceAddress) {
                     val manufacturerData = result.scanRecord?.manufacturerSpecificData
                     if (manufacturerData != null && manufacturerData.size() > 0) {
                         try {
-                            // On prend le premier bloc de données (souvent ID 0x0DC0 ou similaire)
                             val key = manufacturerData.keyAt(0)
                             val bytes = manufacturerData.get(key)
 
-                            // Si le paquet ressemble à une pesée (au moins 4 octets pour Poids+Impédance)
                             if (bytes != null && bytes.size >= 4) {
-                                // A. Mettre à jour l'UI en temps réel (pour voir les chiffres bouger)
-                                parseDataForUi(bytes)
-
-                                // B. Sauvegarder et Arrêter (Succès)
-                                saveMeasurementAndStop(bytes)
+                                val (weight, rawImpedance) = decodeBytes(bytes)
+                                
+                                // Collect ALL packets (including 0 and 500)
+                                val packet = MeasurementPacket(weight, rawImpedance, bytes)
+                                collectedPackets.add(packet)
+                                
+                                // Update UI with current reading
+                                _uiState.update {
+                                    it.copy(
+                                        weight = weight,
+                                        impedance = rawImpedance,
+                                        rawData = bytes.joinToString("") { b -> "%02X".format(b) }
+                                    )
+                                }
+                                
+                                // Reset debounce timer - restart waiting for packets to stop
+                                startPacketDebounce()
                             }
                         } catch (e: Exception) {
-                            Log.e("Talon", "Error parsing data: ${e.message}")
+                            Log.e("Talon", "Error: ${e.message}")
                         }
                     }
                 }
+
             }
         }
 
@@ -124,68 +145,35 @@ class ScaleViewModel(private val context: Context) : ViewModel() {
         }
     }
 
-    // --- PARSING & CALCULS ---
-
-    // Juste pour l'affichage (ne sauvegarde pas)
-    private fun parseDataForUi(bytes: ByteArray) {
-        val (weight, impedance) = decodeBytes(bytes)
-
-        _uiState.update {
-            it.copy(
-                weight = weight,
-                impedance = impedance,
-                rawData = bytes.joinToString("") { byte -> "%02X".format(byte) }
-            )
-        }
-    }
-
-    // Fonction utilitaire pour décoder le binaire
-    private fun decodeBytes(bytes: ByteArray): Pair<Float, Float> {
-        // Poids (Big Endian)
-        val weightMsb = bytes[0].toInt() and 0xFF
-        val weightLsb = bytes[1].toInt() and 0xFF
-        val weightRaw = (weightMsb shl 8) or weightLsb
-        val weight = weightRaw / 100f
-
-        // Impédance (Big Endian)
-        val impMsb = bytes[2].toInt() and 0xFF
-        val impLsb = bytes[3].toInt() and 0xFF
-        val impRaw = (impMsb shl 8) or impLsb
-        val impedance = impRaw / 10f
-
-        return Pair(weight, impedance)
-    }
-
-    // C'est ici que la magie opère : Calcul + Sauvegarde BDD + Arrêt
-    private fun saveMeasurementAndStop(bytes: ByteArray) {
+    // --- LE "FINISSEUR" (Mise à jour Atomique) ---
+    @SuppressLint("MissingPermission")
+    private fun saveMeasurementAndStop(weight: Float, impedance: Float, rawBytes: ByteArray) {
         val now = System.currentTimeMillis()
-        // Anti-rebond : on ignore si on a déjà sauvegardé il y a moins de 5 secondes
         if (now - lastSavedTimestamp < 5000) return
-
         lastSavedTimestamp = now
-        val (weight, impedance) = decodeBytes(bytes)
 
-        // On lance une tâche de fond
         viewModelScope.launch {
-            // 1. On récupère le profil utilisateur (taille, âge, sexe)
-            // .first() prend la valeur actuelle et se déconnecte du flux
             val userProfile = userRepository.userProfile.first()
-
-            // 2. On calcule la graisse, l'eau, etc. grâce à ton algorithme
             val metrics = BodyMetricsCalculator.calculate(weight, impedance, userProfile)
 
-            // 3. On met à jour l'UI avec les résultats finaux calculés
+            // MISE À JOUR FINALE DE L'ÉCRAN
             _uiState.update {
                 it.copy(
                     weight = weight,
-                    impedance = impedance,
+                    impedance = impedance,    // Affiche 551 Ω
                     bodyFat = metrics.bodyFatPercentage,
                     water = metrics.waterPercentage,
-                    muscle = metrics.muscleMass
+                    muscle = metrics.muscleMass,
+                    isScanning = false,       // Arrête l'animation
+                    rawData = rawBytes.joinToString("") { b -> "%02X".format(b) }
                 )
             }
 
-            // 4. On sauvegarde dans la Base de Données Room
+            try {
+                scanTimeoutJob?.cancel()
+                if (isBluetoothEnabled()) scanner?.stopScan(scanCallback)
+            } catch (e: Exception) { Log.e("Talon", "Stop error: ${e.message}") }
+
             measurementRepository.saveMeasurement(
                 weight = weight,
                 fat = metrics.bodyFatPercentage,
@@ -197,58 +185,119 @@ class ScaleViewModel(private val context: Context) : ViewModel() {
                 bmr = metrics.bmr,
                 bmi = metrics.bmi
             )
-            Log.d("TalonDB", "✅ Mesure sauvegardée : ${metrics.bodyFatPercentage}% Fat")
-
-            // 5. On coupe le Bluetooth scanner (Mission accomplie)
-            stopScan()
+            Log.d("TalonDB", "✅ SUCCÈS : ${metrics.bodyFatPercentage}% Fat ($impedance Ω)")
         }
     }
 
-    // --- GESTION DU MATÉRIEL (Permissions & État) ---
-
-    fun isBluetoothEnabled(): Boolean {
-        return bluetoothManager.adapter?.isEnabled == true
+    // --- DEBOUNCE: Detect when packets stop arriving ---
+    private fun startPacketDebounce() {
+        packetDebounceJob?.cancel()
+        packetDebounceJob = viewModelScope.launch {
+            delay(PACKET_TIMEOUT_MS)
+            // No new packets for 2 seconds - sender stopped!
+            onPacketsComplete()
+        }
     }
+
+    // --- SELECTION: Pick the best packet ---
+    private fun onPacketsComplete() {
+        if (isCalculationDone) return
+        isCalculationDone = true
+
+        if (collectedPackets.isEmpty()) {
+            Log.w("Talon", "No packets collected")
+            stopScan()
+            return
+        }
+
+        Log.d("Talon", "Collected ${collectedPackets.size} packets, selecting best...")
+
+        // Filter for GOOD impedance values (not 0 and not 500)
+        val goodPackets = collectedPackets.filter { 
+            it.impedance > 0f && it.impedance != 500.0f 
+        }
+
+        val selectedPacket = if (goodPackets.isNotEmpty()) {
+            // Pick the most common good impedance value
+            val mostCommon = goodPackets
+                .groupBy { it.impedance }
+                .maxByOrNull { it.value.size }
+                ?.value
+                ?.first()
+            
+            Log.d("Talon", "✅ Found ${goodPackets.size} good packets, selected: ${mostCommon?.impedance}Ω")
+            mostCommon!!
+        } else {
+            // Fallback: use the last packet (likely 0 or 500)
+            val fallback = collectedPackets.last()
+            Log.w("Talon", "⚠️ No good impedance found, falling back to: ${fallback.impedance}Ω")
+            fallback
+        }
+
+        // Process the winner
+        saveMeasurementAndStop(
+            selectedPacket.weight,
+            selectedPacket.impedance,
+            selectedPacket.rawBytes
+        )
+    }
+
+    private fun decodeBytes(bytes: ByteArray): Pair<Float, Float> {
+
+        val weightMsb = bytes[0].toInt() and 0xFF
+        val weightLsb = bytes[1].toInt() and 0xFF
+        val weightRaw = (weightMsb shl 8) or weightLsb
+        val weight = weightRaw / 100f
+
+        val impMsb = bytes[2].toInt() and 0xFF
+        val impLsb = bytes[3].toInt() and 0xFF
+        val impRaw = (impMsb shl 8) or impLsb
+        val impedance = impRaw / 10f
+
+        return Pair(weight, impedance)
+    }
+
+    fun isBluetoothEnabled(): Boolean = bluetoothManager.adapter?.isEnabled == true
 
     fun isLocationEnabled(): Boolean {
         return try {
             locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
                     locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
-        } catch (e: Exception) {
-            false
-        }
+        } catch (e: Exception) { false }
     }
-
-    // --- ACTIONS UTILISATEUR ---
 
     @SuppressLint("MissingPermission")
     fun startDiscovery() {
         if (scanner == null) return
-
         try {
-            // Reset de l'état pour une nouvelle recherche
+            isCalculationDone = false // 🔓 DÉVERROUILLAGE au démarrage
+            collectedPackets.clear() // Clear previous packets
+            packetDebounceJob?.cancel() // Cancel any pending debounce
+            
             _uiState.update { it.copy(
                 isScanning = true,
                 isDeviceListOpen = true,
                 scannedDevices = emptyList(),
                 targetAddress = null
             )}
-
-            // Scan Low Latency pour trouver vite
-            val settings = ScanSettings.Builder()
-                .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-                .build()
+            val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
             scanner.startScan(null, settings, scanCallback)
-
         } catch (e: Exception) {
-            Log.e("Talon", "Start discovery error: ${e.message}")
+            Log.e("Talon", "Start error: ${e.message}")
         }
     }
 
+
     @SuppressLint("MissingPermission")
     fun selectDevice(device: BluetoothDeviceUi) {
-        // L'utilisateur a choisi sa balance
-        // On ferme la liste, on enregistre l'adresse cible, et on lance le chrono
+        collectedPackets.clear() // Start fresh for this device
+        packetDebounceJob?.cancel()
+        
+        // Save device for auto-reconnect
+        viewModelScope.launch {
+            preferencesRepository.saveScaleDevice(device.address, device.name)
+        }
+        
         _uiState.update { it.copy(
             isDeviceListOpen = false,
             targetAddress = device.address,
@@ -257,9 +306,9 @@ class ScaleViewModel(private val context: Context) : ViewModel() {
         startTimeoutTimer()
     }
 
+
     @SuppressLint("MissingPermission")
     fun dismissDialog() {
-        // Annulation : on arrête tout
         stopScan()
         _uiState.update { it.copy(isDeviceListOpen = false) }
     }
@@ -269,17 +318,14 @@ class ScaleViewModel(private val context: Context) : ViewModel() {
         try {
             scanTimeoutJob?.cancel()
             scanTimeoutJob = null
-
-            // Scanner peut être null si le BT a été coupé entre temps
-            if (isBluetoothEnabled()) {
-                scanner?.stopScan(scanCallback)
-            }
-
+            packetDebounceJob?.cancel() // Cancel packet processing
+            if (isBluetoothEnabled()) scanner?.stopScan(scanCallback)
             _uiState.update { it.copy(isScanning = false) }
         } catch (e: Exception) {
-            Log.e("Talon", "Stop scan error: ${e.message}")
+            Log.e("Talon", "Stop error: ${e.message}")
         }
     }
+
 
     private fun startTimeoutTimer() {
         scanTimeoutJob?.cancel()
@@ -288,10 +334,49 @@ class ScaleViewModel(private val context: Context) : ViewModel() {
                 delay(1000L)
                 _uiState.update { it.copy(timeRemaining = it.timeRemaining - 1) }
             }
-            // Si le temps est écoulé sans résultat, on arrête
+            // 🛡️ BULLETPROOF: Force save if we have data, even if scale never went silent
             if (_uiState.value.isScanning) {
-                stopScan()
+                if (collectedPackets.isNotEmpty() && !isCalculationDone) {
+                    Log.d("Talon", "⏱️ Timeout reached, forcing packet processing...")
+                    onPacketsComplete()
+                } else {
+                    stopScan()
+                }
             }
+        }
+    }
+    
+    // --- AUTO-CONNECT FEATURE ---
+    @SuppressLint("MissingPermission")
+    fun autoConnectToSavedDevice(address: String) {
+        if (scanner == null) return
+        try {
+            isCalculationDone = false
+            collectedPackets.clear()
+            packetDebounceJob?.cancel()
+            
+            _uiState.update { it.copy(
+                isScanning = true,
+                isDeviceListOpen = false,
+                targetAddress = address,
+                timeRemaining = SCAN_DURATION_SECONDS
+            )}
+            
+            val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
+            scanner.startScan(null, settings, scanCallback)
+            startTimeoutTimer()
+            
+            Log.d("Talon", "🔄 Auto-connecting to saved device: $address")
+        } catch (e: Exception) {
+            Log.e("Talon", "Auto-connect error: ${e.message}")
+        }
+    }
+    
+    fun forgetDevice() {
+        viewModelScope.launch {
+            preferencesRepository.forgetScaleDevice()
+            _uiState.update { it.copy(targetAddress = null) }
+            Log.d("Talon", "🗑️ Saved device forgotten")
         }
     }
 }

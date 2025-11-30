@@ -6,6 +6,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
 import java.util.concurrent.TimeUnit
 import java.util.Calendar
 import com.aquilesorei.talon.data.local.dao.UserPreferencesDao
@@ -44,7 +45,21 @@ class UserPreferencesRepository(
     }
     
     suspend fun completeOnboarding() {
-        preferencesDao.updateOnboardingStatus(true)
+        // Ensure the row exists first, then update
+        val current = preferencesDao.getPreferences().map { it ?: UserPreferences() }.first()
+        preferencesDao.insert(current.copy(id = 1, hasCompletedOnboarding = true))
+    }
+    
+    suspend fun saveScaleDevice(address: String, name: String) {
+        preferencesDao.saveScaleDevice(address, name)
+    }
+    
+    suspend fun forgetScaleDevice() {
+        preferencesDao.clearScaleDevice()
+    }
+
+    suspend fun updateAutoScanEnabled(enabled: Boolean) {
+        preferencesDao.updateAutoScanEnabled(enabled)
     }
     
     private fun scheduleReminder() {
