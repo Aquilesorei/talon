@@ -16,3 +16,4 @@ local.properties
 /.idea/
 /.vscode/
 /TECNO-KI7-Android-13_2025-11-29_095712.logcat
+app/release-key.jks
